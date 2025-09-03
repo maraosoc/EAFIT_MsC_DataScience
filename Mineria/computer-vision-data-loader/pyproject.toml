@@ -1,0 +1,21 @@
+[project]
+name = "src"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "jupyter>=1.1.1",
+    "matplotlib>=3.10.1",
+    "notebook>=7.3.2",
+    "numpy>=2.2.3",
+    "pillow>=11.1.0",
+]
+
+[dependency-groups]
+dev = [
+    "mypy>=1.15.0",
+    "pytest>=8.3.5",
+    "ruff>=0.9.10",
+    "types-requests>=2.32.4.20250809",
+]
