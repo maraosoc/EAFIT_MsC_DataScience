@@ -6,6 +6,9 @@ import csv
 import time
 import logging
 from typing import List
+import glob
+import os
+from utils import ensure_dir
 
 # Configuración de logging
 logging.basicConfig(
@@ -26,8 +29,6 @@ def get_session_for_thread():
         thread_local.session = requests.Session()
     return thread_local.session
 
-def ensure_dir(path):
-    pathlib.Path(path).mkdir(parents=True, exist_ok=True)
 
 # ---------------- PRODUCTOR ----------------
 def producer(csv_files: List[str]):
@@ -36,15 +37,16 @@ def producer(csv_files: List[str]):
     """
     try:
         for filepath in csv_files:
-            with open(filepath, "r") as f:
+            # Añadir encoding para evitar errores con caracteres especiales
+            with open(filepath, "r", encoding="utf-8", newline="") as f:
                 reader = csv.DictReader(f)
                 for row in reader:
                     row["Type1"] = row["Type1"].lower()
                     row["Pokemon"] = row["Pokemon"].lower()
                     pipeline.put(row)  # bloquea si la cola está llena
-                    logging.info(f"Producer: added {row['Pokemon']} to queue")
+                    logging.info(f"Productor: {row['Pokemon']} añadido a la fila")
     finally:
-        logging.info("Producer: finished producing, setting event")
+        logging.info("Productor: finished producing, setting event")
         event.set()  # señal para que los consumidores terminen cuando la cola esté vacía
 
 # ---------------- CONSUMIDOR ----------------
@@ -53,36 +55,46 @@ def consumer(output_dir: str, downloaded: list, failed: list):
     Descarga los sprites de Pokémon y los guarda en output_dir.
     Guarda nombres de pokemones descargados y fallidos en listas compartidas.
     """
-    while not event.is_set() or not pipeline.empty():
-        try:
-            row = pipeline.get(timeout=0.1)  # espera por un item si está vacía
-        except queue.Empty:
-            continue  # sigue si la cola está temporalmente vacía
+    try:
+        while not event.is_set() or not pipeline.empty():
+            try:
+                row = pipeline.get(timeout=0.1)  # espera por un item si está vacía
+            except queue.Empty:
+                continue  # sigue si la cola está temporalmente vacía
 
-        url = row["Sprite"]
-        name = row["Pokemon"]
-        type1 = row["Type1"]
+            url = row["Sprite"]
+            name = row["Pokemon"]
+            type1 = row["Type1"]
 
-        file_path = pathlib.Path(output_dir) / type1 / f"{name}.png"
-        ensure_dir(file_path.parent)
+            file_path = pathlib.Path(output_dir) / type1 / f"{name}.png"
+            ensure_dir(file_path.parent)
+            
 
-        try:
-            session = get_session_for_thread()
-            with session.get(url) as response:
-                if response.status_code == 200:
-                    with open(file_path, "wb") as f:
-                        f.write(response.content)
-                    downloaded.append(name)
-                    logging.info(f"Consumer: downloaded {name}")
-                else:
-                    failed.append(name)
-                    logging.warning(f"Consumer: failed {name}, status {response.status_code}")
-        except Exception as e:
-            failed.append(name)
-            logging.error(f"Consumer: error downloading {name} -> {e}")
+            try:
+                session = get_session_for_thread()
+                with session.get(url) as response:
+                    if response.status_code == 200:
+                        with open(file_path, "wb") as f:
+                            f.write(response.content)
+                        downloaded.append(name)
+                        logging.info(f"Consumer [{threading.current_thread().name}]: downloaded {name}")
+                    else:
+                        failed.append(name)
+                        logging.warning(f"Consumer [{threading.current_thread().name}]: failed {name}, status {response.status_code}")
+            except Exception as e:
+                failed.append(name)
+                logging.error(f"Consumer [{threading.current_thread().name}]: error downloading {name} -> {e}")
+    finally:
+        # Cerrar la sesión asociada al hilo si se creó
+        if hasattr(thread_local, "session"):
+            try:
+                thread_local.session.close()
+            except Exception:
+                pass
+
 
 # ---------------- MAIN ----------------
-def main(csv_files: List[str], output_dir: str, num_consumers: int = 4):
+def main(csv_files: List[str], output_dir: str, num_consumers: int = 8):
     downloaded = []
     failed = []
 
@@ -106,21 +118,26 @@ def main(csv_files: List[str], output_dir: str, num_consumers: int = 4):
         t.join()
 
     duration = time.perf_counter() - start_time
-    logging.info(f"Downloaded {len(downloaded)} pokemons successfully")
-    logging.info(f"Failed to download {len(failed)} pokemons")
-    logging.info(f"Total duration: {duration:.2f} seconds")
+    logging.info(f"{len(downloaded)} pokemones descargados con éxito")
+    logging.info(f"Falló la descarga de {len(failed)} pokemones")
+    logging.info(f"Duración total: {duration:.5f} segundos")
 
     # Guardar log de resultados
     debug_file = pathlib.Path("debugs/pokemon_download_log.txt")
     ensure_dir(debug_file.parent)
-    with open(debug_file, "w") as f:
-        f.write(f"Downloaded ({len(downloaded)}):\n")
+    with open(debug_file, "w", encoding="utf-8") as f:
+        f.write(f"Descargados ({len(downloaded)}):\n")
         f.write("\n".join(downloaded))
-        f.write("\n\nFailed ({len(failed)}):\n")
+        f.write(f"\n\nFallidos ({len(failed)}):\n")
         f.write("\n".join(failed))
 
 # ---------------- EJEMPLO DE USO ----------------
 if __name__ == "__main__":
-    import glob
-    csv_files = glob.glob("../data/*.csv")
-    main(csv_files, output_dir="../output/pokemons")
+    # Obtener ruta absoluta de la carpeta actual del script
+    base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+    data_dir = os.path.join(base_dir, 'data')
+    csv_files = glob.glob(os.path.join(data_dir, '*.csv'))
+    output_dir = os.path.join(base_dir, 'output', 'pokemons')
+    ensure_dir(output_dir)
+
+    main(csv_files, output_dir=output_dir, num_consumers=4)
