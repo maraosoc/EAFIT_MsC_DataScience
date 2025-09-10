@@ -42,10 +42,12 @@ def _test_correctness(output_dir):
 
 class TestSolution(unittest.TestCase):
     def setUp(self):
-        self.inputs = _find_all_datasets()
+        self.inputs = 'data'#_find_all_datasets()
         self.output_dir = "testing_output"
         utils.maybe_remove_dir(self.output_dir)
         utils.maybe_create_dir(self.output_dir)
+        print(f"Testing with inputs: {self.inputs}")
+        print(f"Testing with outputs: {self.output_dir}")
 
     def tearDown(self):
         utils.maybe_remove_dir(self.output_dir)

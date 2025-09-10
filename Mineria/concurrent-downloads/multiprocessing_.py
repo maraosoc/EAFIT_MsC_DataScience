@@ -4,16 +4,9 @@ import time
 import multiprocessing
 import utils
 import atexit
+from typing import Optional
 
-# Variables compartidas entre procesos
-#manager = multiprocessing.Manager() # Permite compartir listas y contadores entre procesos
-# Contadores globales de éxito y fallo
-#success_count = manager.Value('i', 0)
-#fail_count = manager.Value('i', 0)
-# El log se escribirá directamente en el archivo por cada proceso
-#log_file_path = pathlib.Path("debugs") / "multiprocessing_download_log.txt"
-
-session: requests.Session  # Se inicializa por proceso
+session: Optional[requests.Session] = None  # Inicializar session como None para evitar errores
 
 
 def init_process():
@@ -25,76 +18,61 @@ def init_process():
 
 def download_one(row, output_dir):
     """Descargar un Pokémon usando la sesión global del proceso."""
-    #if session is None:
-
-    #row, output_dir = row_and_output
     url = row["Sprite"]
     name = row["Pokemon"]
     type1 = row["Type1"]
     file_path = pathlib.Path(output_dir) / type1 / f"{name}.png"
     utils.ensure_dir(file_path.parent)
 
+    # Crea de una sesión local temporal en caso de que no se inicialice correctamente
+    _local_session = None
+    _s = session
+    if _s is None:
+        _s = requests.Session()
+        _local_session = _s
+
     try:
         # Descarca con la sesion del proceso
-        with session.get(url, timeout=10) as response:
+        with _s.get(url, timeout=10) as response:
             if response.status_code == 200:
                 # Guarda el contenido binario en el archivo
                 utils.write_binary(file_path, response.content)
                 print(f"[OK] {name} ({type1})")
-                #with success_count.get_lock():
-                 #   success_count.value += 1
-                #log_line = f"[OK] {name} ({type1})"
             else:
-                #with fail_count.get_lock():
-                 #   fail_count.value += 1
-                #log_line = f"[FAIL] {name} ({type1}) - No content"
                 print(f"[FAIL] {name} ({type1}) - No content")
     except Exception as e:
         print(f"[ERROR] {name} ({type1}) - {e}")
-        #with fail_count.get_lock():
-         #   fail_count.value += 1
-        #log_line = f"[ERROR] {name} ({type1}) - {e}"
-    # Escribir el log en modo append
-    #with open(log_file_path, "a") as f:
-    #   f.write(log_line + "\n")
+
+    finally:
+        if _local_session is not None: # Cierra la sesión local si se creó
+            _local_session.close()
 
 
 def main(output_dir: str, input_dir: str):
     output_path = pathlib.Path(output_dir)
     utils.ensure_dir(output_path)
 
-    #debug_path = pathlib.Path("debugs")
-    #utils.ensure_dir(debug_path)
-    #log_file = log_file_path
-    # Limpiar el archivo de log antes de iniciar la corrida
-    #open(log_file, "w").close()
-
     # Leer todos los CSV
     input_path = pathlib.Path(input_dir)
     csv_files = list(input_path.glob("*.csv"))
     rows = list(utils.read_pokemons([str(f) for f in csv_files]))
 
-    #start_time = time.perf_counter()
+    start_time = time.perf_counter()
 
     # Preparar lista de tuplas (row, output_dir) para pasar a los procesos
     row_output_pairs = [(row, output_dir) for row in rows] # porque executor.map solo acepta un argumento por iteración
 
+    # Añadir un chunksize pequeño   
+    chunksize = max(1, len(row_output_pairs) // ((multiprocessing.cpu_count() or 1) * 4))
+
     with multiprocessing.Pool(initializer=init_process) as executor:
-        executor.starmap(download_one, row_output_pairs)
+        executor.starmap(download_one, row_output_pairs, chunksize=chunksize)
         executor.close()
         executor.join()
 
-    #duration = time.perf_counter() - start_time
+    duration = time.perf_counter() - start_time
+    print(f"Descarga completa en {duration:.2f} segundos")
 
-    # Guardar resumen al final
-    #with open(log_file, "a") as f:
-     #   f.write(f"\nResumen:\nDescargados correctamente: {success_count.value}\nFallidos: {fail_count.value}\n")
-      #  f.write(f"Tiempo total: {duration:.2f} segundos\n")
-
-    #print(f"Descarga completa en {timed:.2f} segundos")
-    #print(f"Pokémon descargados correctamente: {success_count.value}")
-    #print(f"Pokémon fallidos: {fail_count.value}")
-    #print(f"Log de depuración guardado en {log_file}")
 
 
 
