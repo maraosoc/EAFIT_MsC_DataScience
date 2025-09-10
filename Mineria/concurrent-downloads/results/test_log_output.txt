@@ -1,0 +1,48 @@
+Testing with outputs: testing_output
+E
+======================================================================
+ERROR: test_multiprocessing (test_solutions.TestSolution)       
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "D:\Universidad\MsC\Mineria\EAFIT_MsC_DataScience\Mineria\concurrent-downloads\test_solutions.py", line 66, in test_multiprocessing
+    multiprocessing_main(self.output_dir, self.inputs)
+  File "D:\Universidad\MsC\Mineria\EAFIT_MsC_DataScience\Mineria\concurrent-downloads\multiprocessing_.py", line 56, in main    
+    input_path = pathlib.Path(input_dir)
+  File "C:\Users\Usuario\anaconda3\lib\pathlib.py", line 1041, in __new__
+    self = cls._from_parts(args, init=False)
+  File "C:\Users\Usuario\anaconda3\lib\pathlib.py", line 682, in _from_parts
+    drv, root, parts = self._parse_args(args)
+  File "C:\Users\Usuario\anaconda3\lib\pathlib.py", line 666, in _parse_args
+    a = os.fspath(a)
+TypeError: expected str, bytes or os.PathLike object, not list  
+
+======================================================================
+ERROR: test_threading (test_solutions.TestSolution)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "D:\Universidad\MsC\Mineria\EAFIT_MsC_DataScience\Mineria\concurrent-downloads\test_solutions.py", line 71, in test_threading
+    threading_main(self.output_dir, self.inputs)
+  File "D:\Universidad\MsC\Mineria\EAFIT_MsC_DataScience\Mineria\concurrent-downloads\threading_.py", line 36, in main
+    input_path = pathlib.Path(input_dir)
+  File "C:\Users\Usuario\anaconda3\lib\pathlib.py", line 1041, in __new__
+    self = cls._from_parts(args, init=False)
+  File "C:\Users\Usuario\anaconda3\lib\pathlib.py", line 682, in _from_parts
+    drv, root, parts = self._parse_args(args)
+  File "C:\Users\Usuario\anaconda3\lib\pathlib.py", line 666, in _parse_args
+    a = os.fspath(a)
+TypeError: expected str, bytes or os.PathLike object, not list  
+
+======================================================================
+FAIL: test_asyncio (test_solutions.TestSolution)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "D:\Universidad\MsC\Mineria\EAFIT_MsC_DataScience\Mineria\concurrent-downloads\test_solutions.py", line 62, in test_asyncio
+    _test_correctness(self.output_dir)
+  File "D:\Universidad\MsC\Mineria\EAFIT_MsC_DataScience\Mineria\concurrent-downloads\test_solutions.py", line 34, in _test_correctness
+    assert categories == set(dirs)
+AssertionError
+
+----------------------------------------------------------------------
+Ran 4 tests in 165.175s
+
+FAILED (failures=1, errors=2)
