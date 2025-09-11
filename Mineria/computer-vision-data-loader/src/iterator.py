@@ -79,7 +79,7 @@ def consumer():
     
 def test_pipeline(csv_files, output_dir):
     producer_thread = threading.Thread(target=producer, args=(csv_files, output_dir))
-    consumer_thread = threading.Thread(target=consumer)
+    consumer_thread = threading.Thread(target=consumer, daemon=True)
 
     producer_thread.start()
     consumer_thread.start()
