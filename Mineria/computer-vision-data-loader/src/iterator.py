@@ -10,6 +10,8 @@ import threading
 import queue
 import logging
 import glob
+
+import numpy as np
 from utils import ensure_dir
 
 # ---------------- CONFIGURACIÓN LOGGING ----------------
@@ -38,10 +40,9 @@ def rows_from_csv(csv_files: List[str], output_dir: str) -> Iterator[Row]:
                 if not p.exists():
                     logging.warning(f"{p} does not exist.")
                     continue
-                img = Image.open(p).convert("RGBA")
-                yield Row(name=name, image=img, path=p, type1=type1)
+                yield Row(name=name, image=None, path=p, type1=type1)
 
-def test_iterator(csv_files, output_dir, csv_output="iterador_basico_tiempos.csv"):
+def test_iterator(csv_files, output_dir, csv_output="iterador_basico_tiempos.csv", show_first=True):
     """Prueba el iterador básico y guarda los tiempos en CSV"""
     iterator = rows_from_csv(csv_files, output_dir)
     
@@ -54,19 +55,20 @@ def test_iterator(csv_files, output_dir, csv_output="iterador_basico_tiempos.csv
             count = 0
             for row in iterator:  # Ya tienes el row del iterador
                 t0 = time.perf_counter()
-                # Simular procesamiento de la imagen (ya está cargada)
-                _ = row.image.size  # Acceder a la imagen
+                # Cargar la imagen AQUÍ y medir el tiempo
+                img = Image.open(row.path).convert("RGBA")
                 duration = time.perf_counter() - t0
 
                 # Guardar en CSV (dentro del bloque with)
                 writer.writerow([row.name, f"{duration:.5f}", row.type1])
                 logging.info(f"Iterador básico: imagen ({row.name}) cargada en {duration:.5f}s")
 
-                # Solo mostrar la primera imagen procesada
+                # Solo mostrar la primera imagen procesada si se requiere
                 if count == 0:
-                    plt.title(row.name)
-                    plt.imshow(row.image)
-                    plt.show()
+                    if show_first:
+                        plt.title(row.name)
+                        plt.imshow(np.array(img))
+                        plt.show()
 
                 count += 1
             
@@ -78,7 +80,7 @@ def test_iterator(csv_files, output_dir, csv_output="iterador_basico_tiempos.csv
     return count
 
 # ------------------ PRODUCTOR Y CONSUMIDOR ------------------
-def test_pipeline(csv_files, output_dir, maxsize=20, csv_output="pipeline_tiempos.csv"):
+def test_pipeline(csv_files, output_dir, maxsize=20, csv_output="pipeline_tiempos.csv", show_first=True):
     """Prueba el pipeline productor-consumidor y guarda los tiempos en CSV"""
     # Cola compartida entre productor y consumidor
     pipeline = queue.Queue(maxsize=maxsize)
@@ -102,27 +104,24 @@ def test_pipeline(csv_files, output_dir, maxsize=20, csv_output="pipeline_tiempo
 
     # --------------- CONSUMIDOR DE LECTURA ---------------
     def consumer():
-        processed_count = 0
-
         while not event.is_set() or not pipeline.empty():
             try:
                 row = pipeline.get(timeout=0.1)
+                # Cargar la imagen AQUÍ y medir el tiempo
                 t0 = time.perf_counter()
-                # Simular procesamiento de la imagen
-                _ = row.image.size  # Acceder a la imagen
+                img = Image.open(row.path).convert("RGBA")
                 duration = time.perf_counter() - t0
                 
-                processed_count += 1
                 logging.info(f"Productor-Consumidor: imagen ({row.name}) cargada en {duration:.5f}s")
 
                 # Guardar datos de forma thread-safe
                 with times_lock:
                     times_data.append([row.name, f"{duration:.5f}", row.type1])
 
-                # Solo mostrar la primera imagen procesada
-                if processed_count == 1:
+                # Solo mostrar la primera imagen procesada si se requiere
+                if len(times_data) == 1 and show_first:
                     plt.title(f"{row.name} tipo ({row.type1})")
-                    plt.imshow(row.image)
+                    plt.imshow(np.array(img))
                     plt.show()
                 
                 pipeline.task_done()
@@ -133,7 +132,7 @@ def test_pipeline(csv_files, output_dir, maxsize=20, csv_output="pipeline_tiempo
                     break
                 continue
 
-        logging.info(f"Consumidor: procesó {processed_count} imágenes.")
+        logging.info(f"Consumidor: procesó {len(times_data)} imágenes.")
 
     # Crear y ejecutar los hilos
     producer_thread = threading.Thread(target=producer, args=(csv_files, output_dir), name="Producer")
